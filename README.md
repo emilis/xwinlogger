@@ -29,9 +29,9 @@ The script installs files in /usr/lib/xwinlogger/ and adds links to /usr/bin/
 
 ## Hacking:
 
-    - Start XWinLogger in DEBUG mode:
+- Start XWinLogger in DEBUG mode:
 
-        `$ DEBUG=YES LOG_DIR=/tmp PERIOD=5 xwinlogger`
+    `$ DEBUG=YES LOG_DIR=/tmp PERIOD=5 xwinlogger`
 
-    - Use the source, Luke! :-)
+- Use the source, Luke! :-)
 
