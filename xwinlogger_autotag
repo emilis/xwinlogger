@@ -1,0 +1,43 @@
+#!/bin/bash
+##############################################################################
+#
+# A script that automaticly adds tags to the XWinLogger log entries.
+#
+#    Copyright 2009 Emilis Dambauskas <emilis.d@gmail.com>
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+##############################################################################
+
+
+# If no arguments specified:
+if [ $# -lt 1 ];then
+    echo "Usage: xwinlogger_autotag [tag_file1 tag_file2 ...] csv_file"
+    exit 1;
+fi
+
+
+# csv_file = last argument:
+arguments=($*)
+let "i = $# - 1"
+csv_file=${arguments[$i]}
+arguments[$i]=
+tag_files=${arguments[@]}
+
+if [ -n "$tag_files" ];then
+    awk -f /usr/lib/xwinlogger/autotag.awk /usr/lib/xwinlogger/tags $tag_files mode=data $csv_file
+else
+    awk -f /usr/lib/xwinlogger/autotag.awk /usr/lib/xwinlogger/tags mode=data $csv_file
+fi
+

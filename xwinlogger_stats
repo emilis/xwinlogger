@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# This just calls an awk program on file or standard input:
+if [ -n "$1" ];then
+    awk -f /usr/lib/xwinlogger/stats.awk $1
+else
+    awk -f /usr/lib/xwinlogger/stats.awk
+fi
+

@@ -1,0 +1,11 @@
+[Notebook]
+autosave_version=0
+document_root=/home/emilis/work/winlogger/
+home=:Home
+icon=
+name=XWinLogger
+slow_fs=0
+
+[Namespaces]
+
+# vim: syntax=desktop

@@ -1,0 +1,9 @@
+Content-Type: text/x-zim-wiki
+Wiki-Format: zim 0.26
+Creation-Date: Wed, 18 Feb 2009 09:52:14 +0200
+Modification-Date: Wed, 18 Feb 2009 09:52:18 +0200
+
+====== Home ======
+Created Wednesday 18 February 2009
+
+Welcome to WinLogger wiki!

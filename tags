@@ -1,0 +1,15 @@
+#tag  command  desk  class  name
+
+nothing         *   *   screensaver                 *
+
+www/news        *   *   Firefox/Navigator           *
+www/search      *   *   Firefox/Navigator           */www.google.com/*
+www/dwn         *   *   Transmission/transmission   *
+
+comm/email      *   *   *                           *google.com/mail*
+comm/irc        *   *   Xchat/xchat                 *
+comm/facebook   *   *   *                           *facebook.com*
+comm/im         *   *   Empathy/empathy             *
+
+media/vlc       vlc *   *   *
+

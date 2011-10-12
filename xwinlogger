@@ -1,0 +1,231 @@
+#!/bin/bash
+##############################################################################
+#
+# A script that logs information about what windows are active on the screen.
+#
+#    Copyright 2009 Emilis Dambauskas <emilis.d@gmail.com>
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+##############################################################################
+
+### CONFIGURATION / CONSTANTS ###
+
+DEBUG=${DEBUG:-false}
+PERIOD=${PERIOD:-10} # in seconds.
+LOG_DIR=${LOG_DIR:-"$HOME/xwinlogger"} # directory where log files are stored.
+CHECK_RUNNING=${CHECK_RUNNING:-true} # do not complain if another instance of XWinLogger is already running.
+
+
+### FUNCTIONS ###
+
+# Prints arguments into STDOUT if $DEBUG == true.
+debug()
+{
+    if $DEBUG; then
+        echo $@
+    fi
+}
+
+# This is used to "escape" spaces in list items.
+quote_string()
+{
+    echo `echo $@ | replace '&' '&amp;' ' ' '&nbsp;'`
+}
+
+# Restores string quoted with quote_string and replaces "|" to "---" to keep consistency in log file.
+unquote_string()
+{
+    echo `echo $@ | replace '&nbsp;' ' ' '&amp;' '&' '|' '---'`
+}
+
+# Checks to see if a screensaver is running.
+# Currently works with GNOME screensaver with DBUS interface only.
+screensaver_is_active()
+{
+    status=(`dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call --print-reply --reply-timeout=400 /org/gnome/ScreenSaver org.gnome.ScreenSaver.GetActive | tail -1`)
+
+    debug "ScreenSaver status: ${status[@]}"
+
+    if [ "${status[1]}" == "true" ];then
+        return 0;
+    else
+        return 1;
+    fi
+    }
+
+# Gets data about currently running window.
+get_current_window()
+{
+    start_time=`date '+%F %T %:z'`
+    start_time=`quote_string $start_time`
+    timestamp=`date +%s`
+
+    # Check if screensaver is running:
+    if screensaver_is_active; then
+        debug "ScreenSaver active"
+
+        pid=(`ps -NC grep w | grep screensaver`)
+        pid=${pid[0]}
+
+        cmd=`ps -p $pid -o cmd | tail -1`
+        cmd=`quote_string $cmd`
+       
+        current_window=($start_time $timestamp $pid $cmd 9 "screensaver" "screensaver" "screensaver")
+        debug "Screensaver data: ${current_window[@]}"
+        return 0
+    fi
+
+    # Get window ID:
+    temp=(`xprop -root _NET_ACTIVE_WINDOW`)
+    window_id=${temp[4]}
+
+    # Get window properties.
+    # This one liner replaces multiple calls to `xprop ... | awk ...` which are commented below
+    temp=(`xprop -id $window_id _NET_WM_PID WM_CLASS WM_NAME _NET_WM_DESKTOP | awk 'BEGIN{FS="=";ORS=" ";OFS=""} { \
+        gsub(/^ /, "", $2); \
+        gsub(/&/, "\\\\&amp;", $2); \
+        gsub(/ /, "\\\\&nbsp;", $2); \
+        print $2; \
+        }'`)
+
+    pid=${temp[0]}
+    class=${temp[1]}
+    name=${temp[2]}
+    desktop=${temp[3]}
+
+    debug "pid|class|name|desktop from 'xprop | awk': $pid|$class|$name|$desktop"
+
+    # Replace '"a", "b"' with '/B/a':
+    class=`echo $class | awk -F ',' '{gsub(/"/, "");gsub(/ /, "");print $2 "/" $1;exit}'`
+    debug "class: $class"
+
+    #pid=`xprop -id $window_id _NET_WM_PID | awk -F ' = ' '{print $2;}'`
+    #class=`xprop -id $window_id WM_CLASS | awk -F ' = ' '{print $2;}'`
+    #class=`quote_string $class`
+    #name=`xprop -id $window_id WM_NAME | awk -F ' = ' '{print $2;}'`
+    #name=`quote_string $name`
+    #desktop=`xprop -id $window_id _NET_WM_DESKTOP | awk -F ' = ' '{print $2}'`
+
+    # Get command from PID:
+    cmd=`ps -p $pid -o cmd | tail -1`
+    cmd=`quote_string $cmd`
+
+    # check for specific program "plugins":
+
+    # FireFox:
+    if `echo $cmd | grep -q firefox`; then
+        name=`get_firefox_url`
+    fi
+
+    # return value:
+    current_window=($start_time $timestamp $pid $cmd $desktop $window_id $class $name)
+    debug "Window data: ${current_window[@]}"
+}
+
+# Checks if active window has changed. 
+active_window_changed()
+{
+    # check for all values in window data except start_time and duration:
+    for i in 2 3 4 5 6 7
+    do
+        if [ "${current_window[$i]}" != "${last_window[$i]}" ]
+            then return 0 # active window has changed
+        fi
+    done
+    return 1 # status != 0 means that windows have not changed.
+}
+
+# Writes window data to log.
+log_old_window()
+{
+    debug "log_old_window $#"
+    
+    line="`unquote_string $1`|$2|$3|`unquote_string $4`|$5|$6|`unquote_string $7`|`unquote_string $8`"
+    debug "log line: $line"
+
+    log_file_name="$LOG_DIR/`date '+%F.log'`"
+    debug "log file name: $log_file_name"
+
+    echo $line >> $log_file_name
+}
+
+# Gets FireFox active URL as reported by RescueTime extension.
+get_firefox_url()
+{
+    cat "$HOME/.mozilla/firefox/currentURL"
+}
+
+
+### PROGRAM ###
+
+# window data structure:
+# 0 start_time
+# 1 duration / timestamp
+# 2 pid
+# 3 cmd
+# 4 desk
+# 5 window_id
+# 6 class
+# 7 name
+last_window=(start_time `date +%s` pid cmd desk window_id class name)
+current_window=(start_time duration pid cmd desk window_id class name)
+
+# check if XWinLogger is already running:
+if $CHECK_RUNNING;then
+    debug "ps -C xwinlogger: `ps -C xwinlogger`"
+    if [ `ps -C xwinlogger | wc -l` -gt 3 ];then
+        echo "Error: Another XWinLogger process is already running. Please kill that process or run this program as: CHECK_RUNNING=false $0" 1>&2
+        exit 1; # xwinlogger is already running
+    fi 
+fi
+
+# create log directory if needed:
+if [ ! -d $LOG_DIR ];then
+    debug "LOG_DIR $LOG_DIR does not exist."
+    if ! `mkdir -p $LOG_DIR`;then
+        echo "LOG_DIR $LOG_DIR does not exist and could not be created." 1>&2
+        exit 2; # cannot create LOG_DIR
+    fi
+fi
+
+# check if log directory is writable:
+if [ ! -w $LOG_DIR ];then
+    echo "Cannot write logs to LOG_DIR $LOG_DIR because it is not writable by this user or process." 1>&2
+    exit 3;
+fi
+
+
+# Main loop:
+while true; do
+    debug '========='
+
+    get_current_window
+
+    if active_window_changed; then
+        debug "Last window was: ${last_window[@]}"
+
+        # set duration based on timestamp:
+        let "last_window[1] = `date +%s` - ${last_window[1]}"
+
+        # write to log:
+        log_old_window ${last_window[@]}
+
+        # last_window=current_window
+        typeset -a last_window=(${current_window[@]})
+    fi
+
+    sleep $PERIOD
+done
+
