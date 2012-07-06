@@ -54,16 +54,9 @@ unquote_string()
 # Currently works with GNOME screensaver with DBUS interface only.
 screensaver_is_active()
 {
-    status=(`dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call --print-reply --reply-timeout=400 /org/gnome/ScreenSaver org.gnome.ScreenSaver.GetActive | tail -1`)
-
-    debug "ScreenSaver status: ${status[@]}"
-
-    if [ "${status[1]}" == "true" ];then
-        return 0;
-    else
-        return 1;
-    fi
-    }
+    xscreensaver-command -time | grep "screen blanked" 2> /dev/null 1> /dev/null;
+    return $?;
+}
 
 # Gets data about currently running window.
 get_current_window()
