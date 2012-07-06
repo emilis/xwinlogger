@@ -33,7 +33,7 @@ CHECK_RUNNING=${CHECK_RUNNING:-true} # do not complain if another instance of XW
 # Prints arguments into STDOUT if $DEBUG == true.
 debug()
 {
-    if $DEBUG; then
+    if "$DEBUG"; then
         echo $@
     fi
 }
@@ -41,13 +41,13 @@ debug()
 # This is used to "escape" spaces in list items.
 quote_string()
 {
-    echo `echo $@ | replace '&' '&amp;' ' ' '&nbsp;'`
+    echo `echo $@ | sed -e 's/&/&amp;/g' -e 's/ /\&nbsp;/g'`
 }
 
 # Restores string quoted with quote_string and replaces "|" to "---" to keep consistency in log file.
 unquote_string()
 {
-    echo `echo $@ | replace '&nbsp;' ' ' '&amp;' '&' '|' '---'`
+    echo `echo $@ | sed -e 's/&nbsp;/ /g' -e 's/&amp;/\&/g' -e 's/|/---/g'`;
 }
 
 # Checks to see if a screensaver is running.
