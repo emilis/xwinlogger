@@ -1,0 +1,13 @@
+#!/bin/sh
+
+DESK="$1"
+DATE=`date +%F`
+LOG_DIR=${LOG_DIR:-"$HOME/xwinlogger"} # directory where log files are stored.
+LOGFILE="$LOG_DIR/$DATE.log"
+
+if [ -z "$DESK" ]
+then SECONDS=`awk -F "|" 'BEGIN{c=0} {c=c+$2} END{print c}' "$LOGFILE"`;
+else SECONDS=`awk -F "|" -v d="$DESK" 'BEGIN{c=0} {if ($3==d) c=c+$2;} END{print c}' "$LOGFILE"`;
+fi
+
+echo $SECONDS

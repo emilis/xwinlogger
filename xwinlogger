@@ -54,7 +54,7 @@ unquote_string()
 # Currently works with GNOME screensaver with DBUS interface only.
 screensaver_is_active()
 {
-    xscreensaver-command -time | grep "screen blanked" 2> /dev/null 1> /dev/null;
+    xscreensaver-command -time | grep -E "screen (blanked|locked)" 2> /dev/null 1> /dev/null;
     return $?;
 }
 
@@ -75,18 +75,42 @@ get_current_window()
         cmd=`ps -p $pid -o cmd | tail -1`
         cmd=`quote_string $cmd`
        
-        current_window=($start_time $timestamp $pid $cmd 9 "screensaver" "screensaver" "screensaver")
+        current_window=($start_time $timestamp 16 "screensaver" $pid $cmd "screensaver" "screensaver")
         debug "Screensaver data: ${current_window[@]}"
         return 0
     fi
 
     # Get window ID:
-    temp=(`xprop -root _NET_ACTIVE_WINDOW`)
+    temp=(`xprop -root _NET_ACTIVE_WINDOW _NET_CURRENT_DESKTOP`)
     window_id=${temp[4]}
+    desktop=${temp[7]}
+
+    if [ "$window_id" == "0x0" ];
+    then
+        debug "Desktop active"
+
+        pid=(`ps -NC grep w | grep /usr/bin/X`)
+        pid=${pid[0]}
+
+        cmd=`ps -p $pid -o cmd | tail -1`
+        cmd=`quote_string $cmd`
+
+        current_window=($start_time $timestamp $desktop $window_id $pid $cmd "desktop" "desktop")
+        debug "Desktop data: ${current_window[@]}"
+        return 0
+    fi
 
     # Get window properties.
     # This one liner replaces multiple calls to `xprop ... | awk ...` which are commented below
-    temp=(`xprop -id $window_id _NET_WM_PID WM_CLASS WM_NAME _NET_WM_DESKTOP | awk 'BEGIN{FS="=";ORS=" ";OFS=""} { \
+    temp=`xprop -id $window_id _NET_WM_PID WM_CLASS WM_NAME _NET_WM_DESKTOP` 2> /dev/null
+    if [ $? -ne 0 ];
+    then
+        debug "Failed to get window $window_id properties: ${temp[@]}."
+        # Assume same window as last time:
+        return 0;
+    fi
+
+    temp=(`echo "$temp" | awk 'BEGIN{FS="=";ORS=" ";OFS=""} { \
         gsub(/^ /, "", $2); \
         gsub(/&/, "\\\\&amp;", $2); \
         gsub(/ /, "\\\\&nbsp;", $2); \
@@ -115,15 +139,21 @@ get_current_window()
     cmd=`ps -p $pid -o cmd | tail -1`
     cmd=`quote_string $cmd`
 
+    if [ $? -gt 0 ];
+    then
+        echo ERROR GETTING CMD: $temp;
+        echo `xprop -id $window_id _NET_WM_PID WM_CLASS WM_NAME _NET_WM_DESKTOP`;
+    fi
+
     # check for specific program "plugins":
 
     # FireFox:
-    if `echo $cmd | grep -q firefox`; then
-        name=`get_firefox_url`
-    fi
+    #if `echo $cmd | grep -q firefox`; then
+    #    name=`get_firefox_url`
+    #fi
 
     # return value:
-    current_window=($start_time $timestamp $pid $cmd $desktop $window_id $class $name)
+    current_window=($start_time $timestamp $desktop $window_id $pid $cmd $class $name)
     debug "Window data: ${current_window[@]}"
 }
 
@@ -145,7 +175,7 @@ log_old_window()
 {
     debug "log_old_window $#"
     
-    line="`unquote_string $1`|$2|$3|`unquote_string $4`|$5|$6|`unquote_string $7`|`unquote_string $8`"
+    line="`unquote_string $1`|$2|$3|$4|$5|`unquote_string $6`|`unquote_string $7`|`unquote_string $8`"
     debug "log line: $line"
 
     log_file_name="$LOG_DIR/`date '+%F.log'`"
@@ -172,8 +202,8 @@ get_firefox_url()
 # 5 window_id
 # 6 class
 # 7 name
-last_window=(start_time `date +%s` pid cmd desk window_id class name)
-current_window=(start_time duration pid cmd desk window_id class name)
+last_window=(start_time `date +%s` desk window_id pid cmd class name)
+current_window=(start_time duration desk window_id pid cmd class name)
 
 # check if XWinLogger is already running:
 if $CHECK_RUNNING;then
