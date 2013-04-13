@@ -106,7 +106,8 @@ get_current_window()
     if [ $? -ne 0 ];
     then
         debug "Failed to get window $window_id properties: ${temp[@]}."
-        # Assume same window as last time:
+        # Log as unknown
+        current_window=($start_time $timestamp $desktop $window_id 0 "" "unknown" "unknown")
         return 0;
     fi
 
