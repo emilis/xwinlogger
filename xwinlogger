@@ -26,6 +26,7 @@ DEBUG=${DEBUG:-false}
 PERIOD=${PERIOD:-10} # in seconds.
 LOG_DIR=${LOG_DIR:-"$HOME/xwinlogger"} # directory where log files are stored.
 CHECK_RUNNING=${CHECK_RUNNING:-true} # do not complain if another instance of XWinLogger is already running.
+TIME_FORMAT='+%F %T %:z'
 
 
 ### FUNCTIONS ###
@@ -50,7 +51,27 @@ unquote_string() {
     echo `echo $@ | sed -e 's/&nbsp;/ /g' -e 's/&amp;/\&/g' -e 's/|/---/g'`;
 }
 
-get-pid-cmd() {
+format_time() {
+
+    if [ -z "$1" ]
+    then
+        quote_string `date "$TIME_FORMAT"`
+    else
+        quote_string `date -d "$1" "$TIME_FORMAT"`
+    fi
+}
+
+format_ts() {
+
+    if [ -z "$1" ]
+    then
+        date +%s
+    else
+        date -d "$1" +%s
+    fi
+}
+
+get_pid_cmd() {
     
     pid=(`ps -NC grep w | grep "$1"`)
     pid=${pid[0]}
@@ -72,15 +93,14 @@ screensaver_is_active() {
 # Gets data about currently running window.
 get_current_window() {
 
-    start_time=`date '+%F %T %:z'`
-    start_time=`quote_string $start_time`
-    timestamp=`date +%s`
+    start_time=`format_time`
+    timestamp=`format_ts`
 
     # Check if screensaver is running:
     if screensaver_is_active; then
         debug "ScreenSaver active"
-        pidcmd=(`get-pid-cmd screensaver`)
-        current_window=($start_time $timestamp 16 "screensaver" ${pidcmd[0]} ${pidcmd[1]} "screensaver" "screensaver")
+        pidcmd=(`get_pid_cmd screensaver`)
+        current_window=($start_time $timestamp 16 "0x0" ${pidcmd[0]} ${pidcmd[1]} "screensaver" "screensaver")
         debug "Screensaver data: ${current_window[@]}"
         return 0
     fi
@@ -93,7 +113,7 @@ get_current_window() {
     if [ "$window_id" == "0x0" ];
     then
         debug "Desktop active"
-        pidcmd=(`get-pid-cmd /usr/bin/X`)
+        pidcmd=(`get_pid_cmd /usr/bin/X`)
         current_window=($start_time $timestamp $desktop $window_id ${pidcmd[0]} ${pidcmd[1]} "desktop" "desktop")
         debug "Desktop data: ${current_window[@]}"
         return 0
@@ -145,13 +165,6 @@ get_current_window() {
         echo `xprop -id $window_id _NET_WM_PID WM_CLASS WM_NAME _NET_WM_DESKTOP`;
     fi
 
-    # check for specific program "plugins":
-
-    # FireFox:
-    #if `echo $cmd | grep -q firefox`; then
-    #    name=`get_firefox_url`
-    #fi
-
     # return value:
     current_window=($start_time $timestamp $desktop $window_id $pid $cmd $class $name)
     debug "Window data: ${current_window[@]}"
@@ -184,26 +197,44 @@ log_old_window() {
     echo $line >> $log_file_name
 }
 
-# Gets FireFox active URL as reported by RescueTime extension.
-get_firefox_url() {
+# Get timestamp from Power Manager suspend log where line matches given pattern.
+grep_suspend_time() {
 
-    cat "$HOME/.mozilla/firefox/currentURL"
+    mtime=`grep "$1" /var/log/pm-suspend.log | tail -1`
+    echo "${mtime:0:29}"
 }
 
+
+# Set suspend_time and awake_time global variables.
+get_suspend_times() {
+
+    suspend_time=`grep_suspend_time ": performing suspend"`
+    awake_time=`grep_suspend_time ": Awake."`
+}
+
+# Checks if suspend happened after last_window was set.
+after_suspend() {
+
+    awake_s=`format_time "$awake_time"`
+    [[ "$awake_s" > "${last_window[0]}" ]]
+    return $?
+}
 
 ### PROGRAM ###
 
 # window data structure:
 # 0 start_time
 # 1 duration / timestamp
-# 2 pid
-# 3 cmd
-# 4 desk
-# 5 window_id
+# 2 desk
+# 3 window_id
+# 4 pid
+# 5 cmd
 # 6 class
 # 7 name
-last_window=(start_time `date +%s` desk window_id pid cmd class name)
+last_window=(start_time `format_ts` desk window_id pid cmd class name)
 current_window=(start_time duration desk window_id pid cmd class name)
+suspend_time=1970-01-01
+awake_time=1970-01-01
 
 # check if XWinLogger is already running:
 if $CHECK_RUNNING;then
@@ -235,12 +266,26 @@ while true; do
     debug '========='
 
     get_current_window
+    get_suspend_times
+
+    if after_suspend; then
+        debug "After suspend."
+        
+        # Log window that was active before suspend:
+        suspend_ts=`format_ts "$suspend_time"`
+        let "last_window[1] = $suspend_ts - ${last_window[1]}"
+        log_old_window ${last_window[@]}
+
+        # Save suspend time as last_window:
+        last_window=(`format_time "$suspend_time"` $suspend_ts 16 "0x0" 0 "pm-suspend" "suspend" "suspend")
+    fi
+
 
     if active_window_changed; then
         debug "Last window was: ${last_window[@]}"
 
         # set duration based on timestamp:
-        let "last_window[1] = `date +%s` - ${last_window[1]}"
+        let "last_window[1] = `format_ts` - ${last_window[1]}"
 
         # write to log:
         log_old_window ${last_window[@]}
