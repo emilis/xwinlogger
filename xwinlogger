@@ -31,36 +31,47 @@ CHECK_RUNNING=${CHECK_RUNNING:-true} # do not complain if another instance of XW
 ### FUNCTIONS ###
 
 # Prints arguments into STDOUT if $DEBUG == true.
-debug()
-{
+debug() {
+
     if "$DEBUG"; then
         echo $@
     fi
 }
 
 # This is used to "escape" spaces in list items.
-quote_string()
-{
+quote_string() {
+
     echo `echo $@ | sed -e 's/&/&amp;/g' -e 's/ /\&nbsp;/g'`
 }
 
 # Restores string quoted with quote_string and replaces "|" to "---" to keep consistency in log file.
-unquote_string()
-{
+unquote_string() {
+
     echo `echo $@ | sed -e 's/&nbsp;/ /g' -e 's/&amp;/\&/g' -e 's/|/---/g'`;
+}
+
+get-pid-cmd() {
+    
+    pid=(`ps -NC grep w | grep "$1"`)
+    pid=${pid[0]}
+
+    cmd=`ps -p $pid -o cmd | tail -1`
+    cmd=`quote_string $cmd`
+   
+    echo "$pid" "$cmd"
 }
 
 # Checks to see if a screensaver is running.
 # Currently works with GNOME screensaver with DBUS interface only.
-screensaver_is_active()
-{
+screensaver_is_active() {
+
     xscreensaver-command -time | grep -E "screen (blanked|locked)" 2> /dev/null 1> /dev/null;
     return $?;
 }
 
 # Gets data about currently running window.
-get_current_window()
-{
+get_current_window() {
+
     start_time=`date '+%F %T %:z'`
     start_time=`quote_string $start_time`
     timestamp=`date +%s`
@@ -68,14 +79,8 @@ get_current_window()
     # Check if screensaver is running:
     if screensaver_is_active; then
         debug "ScreenSaver active"
-
-        pid=(`ps -NC grep w | grep screensaver`)
-        pid=${pid[0]}
-
-        cmd=`ps -p $pid -o cmd | tail -1`
-        cmd=`quote_string $cmd`
-       
-        current_window=($start_time $timestamp 16 "screensaver" $pid $cmd "screensaver" "screensaver")
+        pidcmd=(`get-pid-cmd screensaver`)
+        current_window=($start_time $timestamp 16 "screensaver" ${pidcmd[0]} ${pidcmd[1]} "screensaver" "screensaver")
         debug "Screensaver data: ${current_window[@]}"
         return 0
     fi
@@ -88,14 +93,8 @@ get_current_window()
     if [ "$window_id" == "0x0" ];
     then
         debug "Desktop active"
-
-        pid=(`ps -NC grep w | grep /usr/bin/X`)
-        pid=${pid[0]}
-
-        cmd=`ps -p $pid -o cmd | tail -1`
-        cmd=`quote_string $cmd`
-
-        current_window=($start_time $timestamp $desktop $window_id $pid $cmd "desktop" "desktop")
+        pidcmd=(`get-pid-cmd /usr/bin/X`)
+        current_window=($start_time $timestamp $desktop $window_id ${pidcmd[0]} ${pidcmd[1]} "desktop" "desktop")
         debug "Desktop data: ${current_window[@]}"
         return 0
     fi
@@ -159,8 +158,8 @@ get_current_window()
 }
 
 # Checks if active window has changed. 
-active_window_changed()
-{
+active_window_changed() {
+
     # check for all values in window data except start_time and duration:
     for i in 2 3 4 5 6 7
     do
@@ -172,8 +171,8 @@ active_window_changed()
 }
 
 # Writes window data to log.
-log_old_window()
-{
+log_old_window() {
+
     debug "log_old_window $#"
     
     line="`unquote_string $1`|$2|$3|$4|$5|`unquote_string $6`|`unquote_string $7`|`unquote_string $8`"
@@ -186,8 +185,8 @@ log_old_window()
 }
 
 # Gets FireFox active URL as reported by RescueTime extension.
-get_firefox_url()
-{
+get_firefox_url() {
+
     cat "$HOME/.mozilla/firefox/currentURL"
 }
 
